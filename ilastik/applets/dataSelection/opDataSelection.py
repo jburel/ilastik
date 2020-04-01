@@ -138,13 +138,7 @@ class DatasetInfo(ABC):
     @classmethod
     def from_h5_group(cls, data: h5py.Group, params: Dict = None):
         params = params or {}
-        params.update(
-            {
-                "allowLabels": data["allowLabels"][()],
-                "nickname": data["nickname"][()].decode("utf-8"),
-                "project_file": data.file,
-            }
-        )
+        params.update({"allowLabels": data["allowLabels"][()], "nickname": data["nickname"][()].decode("utf-8")})
         if "axistags" in data:
             params["axistags"] = AxisTags.fromJSON(data["axistags"][()].decode("utf-8"))
         elif "axisorder" in data:  # legacy support
@@ -315,6 +309,7 @@ class ProjectInternalDatasetInfo(DatasetInfo):
     @classmethod
     def from_h5_group(cls, data: h5py.Group, params: Dict = None):
         params = params or {}
+        params["project_file"] = data.file
         if "datasetId" in data and "inner_path" not in data:  # legacy format
             dataset_id = data["datasetId"][()].decode("utf-8")
             inner_path = None
@@ -394,7 +389,13 @@ class UrlDatasetInfo(DatasetInfo):
         self.url = url
         op_reader = OpInputDataReader(graph=Graph(), FilePath=self.url)
         meta = op_reader.Output.meta.copy()
-        super().__init__(default_tags=meta.axistags, nickname=nickname or self.url.split("/")[-1], **info_kwargs)
+        super().__init__(
+            default_tags=meta.axistags,
+            nickname=nickname or self.url.split("/")[-1],
+            laneShape=meta.shape,
+            laneDtype=meta.dtype,
+            **info_kwargs,
+        )
 
     @property
     def legacy_location(self) -> str:
@@ -416,6 +417,10 @@ class UrlDatasetInfo(DatasetInfo):
         out = super().to_json_data()
         out["url"] = self.url
         return out
+
+    @classmethod
+    def from_h5_group(cls, group: h5py.Group):
+        return super().from_h5_group(group, {"url": group["filePath"][()].decode("utf-8")})
 
 
 class FilesystemDatasetInfo(DatasetInfo):
@@ -472,8 +477,9 @@ class FilesystemDatasetInfo(DatasetInfo):
         return op_reader.Output
 
     @classmethod
-    def from_h5_group(cls, group: h5py.Group):
-        return super().from_h5_group(group, {"filePath": group["filePath"][()].decode("utf-8")})
+    def from_h5_group(cls, data: h5py.Group):
+        params = {"project_file": data.file, "filePath": data["filePath"][()].decode("utf-8")}
+        return super().from_h5_group(data, params)
 
     def isHdf5(self) -> bool:
         return any(self.pathIsHdf5(ep) for ep in self.external_paths)
