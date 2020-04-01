@@ -390,9 +390,11 @@ class PreloadedArrayDatasetInfo(DatasetInfo):
 
 
 class UrlDatasetInfo(DatasetInfo):
-    def __init__(self, *, url: str, **info_kwargs):
+    def __init__(self, *, url: str, nickname: str = "", **info_kwargs):
         self.url = url
-        super().__init__(**info_kwargs)
+        op_reader = OpInputDataReader(graph=Graph(), FilePath=self.url)
+        meta = op_reader.Output.meta.copy()
+        super().__init__(default_tags=meta.axistags, nickname=nickname or self.url.split("/")[-1], **info_kwargs)
 
     @property
     def legacy_location(self) -> str:
@@ -403,7 +405,7 @@ class UrlDatasetInfo(DatasetInfo):
         return self.url
 
     def get_provider_slot(self, parent):
-        op_reader = OpInputDataReader(parent=parent, FilePath=self.effective_path)
+        op_reader = OpInputDataReader(parent=parent, FilePath=self.url)
         return op_reader.Output
 
     @property
